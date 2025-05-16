@@ -1,6 +1,8 @@
 # Impacket - Collection of Python classes for working with network protocols.
 #
-# Copyright (C) 2023 Fortra. All rights reserved.
+# Copyright Fortra, LLC and its affiliated companies 
+#
+# All rights reserved.
 #
 # This software is provided under a slightly modified version
 # of the Apache Software License. See the accompanying LICENSE file
@@ -59,7 +61,7 @@ import string
 import time
 from binascii import unhexlify, hexlify
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from struct import unpack, pack
 from six import b, PY2
 
@@ -777,10 +779,6 @@ class RemoteOperations:
                 LOG.error(e)
             return None
 
-    def __getSCManagerHandle(self):
-        ans = scmr.hROpenSCManagerW(self.__scmr)
-        self.__scManagerHandle = ans['lpScHandle']
-
     def __checkServiceStatus(self):
         # Open SC Manager
         ans = scmr.hROpenSCManagerW(self.__scmr)
@@ -1243,10 +1241,6 @@ class RemoteOperations:
         LOG.debug('Got SMB GMT Path: %s' % gmtSMBPath)
         LOG.debug('Performed SS via WMI and got info')
 
-        if self.__execMethod == 'smbexec':
-            self.__connectSvcCtl()
-            self.__getSCManagerHandle()
-
         # Array of tuples of (local path to download, remote path of file)
         paths = [('%s/SAM' % localPath, '%s\\System32\\config\\SAM' % gmtSMBPath),
                  ('%s/SYSTEM' % localPath, '%s\\System32\\config\\SYSTEM' % gmtSMBPath),
@@ -1438,7 +1432,7 @@ class SAMHashes(OfflineRegistry):
             userName = V[userAccount['NameOffset']:userAccount['NameOffset']+userAccount['NameLength']].decode('utf-16le')
 
             if userAccount['NTHashLength'] == 0:
-                logging.error('SAM hashes extraction for user %s failed. The account doesn\'t have hash information.' % userName)
+                logging.debug('The account %s doesn\'t have hash information.' % userName)
                 continue
 
             encNTHash = b''
@@ -1658,7 +1652,7 @@ class LSASecrets(OfflineRegistry):
                 userName = plainText[:record['UserLength']].decode('utf-16le')
                 plainText = plainText[self.__pad(record['UserLength']) + self.__pad(record['DomainNameLength']):]
                 domainLong = plainText[:self.__pad(record['DnsDomainNameLength'])].decode('utf-16le')
-                timestamp = datetime.utcfromtimestamp(getUnixTime(record['LastWrite']))
+                timestamp = datetime.fromtimestamp(getUnixTime(record['LastWrite']), tz=timezone.utc)
 
                 if self.__vistaStyle is True:
                     answer = "%s/%s:$DCC2$%s#%s#%s: (%s)" % (domainLong, userName, iterationCount, userName, hexlify(encHash).decode('utf-8'), timestamp)
@@ -1969,6 +1963,7 @@ class NTDSHashes:
         'pekList':b'ATTk590689',
         'supplementalCredentials':b'ATTk589949',
         'pwdLastSet':b'ATTq589920',
+        'instanceType':b'ATTj131073',
     }
 
     NAME_TO_ATTRTYP = {
@@ -2106,6 +2101,7 @@ class NTDSHashes:
             self.NAME_TO_INTERNAL['userAccountControl'] : 1,
             self.NAME_TO_INTERNAL['supplementalCredentials'] : 1,
             self.NAME_TO_INTERNAL['pekList'] : 1,
+            self.NAME_TO_INTERNAL['instanceType'] : 1,
 
         }
 
@@ -2127,7 +2123,7 @@ class NTDSHashes:
             elif record[self.NAME_TO_INTERNAL['pekList']] is not None:
                 peklist =  unhexlify(record[self.NAME_TO_INTERNAL['pekList']])
                 break
-            elif record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.ACCOUNT_TYPES:
+            elif record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.ACCOUNT_TYPES and record[self.NAME_TO_INTERNAL['instanceType']] & 4:    # "The object is writable on this directory":
                 # Okey.. we found some users, but we're not yet ready to process them.
                 # Let's just store them in a temp list
                 self.__tmpUsers.append(record)
@@ -2654,7 +2650,7 @@ class NTDSHashes:
                         if record is None:
                             break
                         try:
-                            if record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.ACCOUNT_TYPES:
+                            if record[self.NAME_TO_INTERNAL['sAMAccountType']] in self.ACCOUNT_TYPES and record[self.NAME_TO_INTERNAL['instanceType']] & 4:    # "The object is writable on this directory"
                                 self.__decryptHash(record, outputFile=hashesOutputFile)
                                 if self.__justNTLM is False:
                                     self.__decryptSupplementalInfo(record, None, keysOutputFile, clearTextOutputFile)
@@ -3002,10 +2998,10 @@ class KeyListSecrets:
         encTicketPart['transited'] = noValue
         encTicketPart['transited']['tr-type'] = 0
         encTicketPart['transited']['contents'] = ''
-        encTicketPart['authtime'] = KerberosTime.to_asn1(datetime.utcnow())
-        encTicketPart['starttime'] = KerberosTime.to_asn1(datetime.utcnow())
+        encTicketPart['authtime'] = KerberosTime.to_asn1(datetime.now(timezone.utc))
+        encTicketPart['starttime'] = KerberosTime.to_asn1(datetime.now(timezone.utc))
         # Let's extend the ticket's validity a lil bit
-        ticketDuration = datetime.utcnow() + timedelta(days=int(120))
+        ticketDuration = datetime.now(timezone.utc) + timedelta(days=int(120))
         encTicketPart['endtime'] = KerberosTime.to_asn1(ticketDuration)
         encTicketPart['renew-till'] = KerberosTime.to_asn1(ticketDuration)
         # We don't need PAC
@@ -3041,7 +3037,7 @@ class KeyListSecrets:
 
         seq_set(authenticator, 'cname', userName.components_to_asn1)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
 
@@ -3079,7 +3075,7 @@ class KeyListSecrets:
         reqBody['sname']['name-string'][1] = self.__domain
         reqBody['realm'] = self.__domain
 
-        now = datetime.utcnow() + timedelta(days=1)
+        now = datetime.now(timezone.utc) + timedelta(days=1)
 
         reqBody['till'] = KerberosTime.to_asn1(now)
         reqBody['nonce'] = rand.getrandbits(31)

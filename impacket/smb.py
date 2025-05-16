@@ -1,6 +1,8 @@
 # Impacket - Collection of Python classes for working with network protocols.
 #
-# Copyright (C) 2023 Fortra. All rights reserved.
+# Copyright Fortra, LLC and its affiliated companies 
+#
+# All rights reserved.
 #
 # This software is provided under a slightly modified version
 # of the Apache Software License. See the accompanying LICENSE file
@@ -914,7 +916,7 @@ class SMBFindFileBothDirectoryInfo(AsciiOrUnicodeStructure):
         ('ExtFileAttributes','<L=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L=0'),
         ('ShortNameLength','<B=0'),
         ('Reserved','<B=0'),
@@ -922,7 +924,7 @@ class SMBFindFileBothDirectoryInfo(AsciiOrUnicodeStructure):
         ('FileName',':'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)*2'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L=0'),
         ('ShortNameLength','<B=0'),
         ('Reserved','<B=0'),
@@ -944,14 +946,14 @@ class SMBFindFileIdFullDirectoryInfo(AsciiOrUnicodeStructure):
         ('ExtFileAttributes','<L=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L=0'),
         ('Reserved', '<L=0'),
         ('FileID','<q=0'),
         ('FileName','z'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)*2'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L=0'),
         ('Reserved','<L=0'),
         ('FileID','<q=0'),
@@ -972,7 +974,7 @@ class SMBFindFileIdBothDirectoryInfo(AsciiOrUnicodeStructure):
         ('ExtFileAttributes','<L=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L=0'),
         ('ShortNameLength','<B=0'),
         ('Reserved','<B=0'),
@@ -982,7 +984,7 @@ class SMBFindFileIdBothDirectoryInfo(AsciiOrUnicodeStructure):
         ('FileName','z'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)*2'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L=0'),
         ('ShortNameLength','<B=0'),
         ('Reserved','<B=0'),
@@ -1006,11 +1008,11 @@ class SMBFindFileDirectoryInfo(AsciiOrUnicodeStructure):
         ('ExtFileAttributes','<L=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('FileName','z'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)*2'),
+        ('FileNameLength','<L-FileName'),
         ('FileName',':'),
     )
 
@@ -1021,11 +1023,11 @@ class SMBFindFileNamesInfo(AsciiOrUnicodeStructure):
         ('FileIndex','<L=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('FileName','z'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)*2'),
+        ('FileNameLength','<L-FileName'),
         ('FileName',':'),
     )
 
@@ -1043,12 +1045,12 @@ class SMBFindFileFullDirectoryInfo(AsciiOrUnicodeStructure):
         ('ExtFileAttributes','<L=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L'),
         ('FileName','z'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<L-FileName','len(FileName)*2'),
+        ('FileNameLength','<L-FileName'),
         ('EaSize','<L'),
         ('FileName',':'),
     )
@@ -1068,11 +1070,11 @@ class SMBFindInfoStandard(AsciiOrUnicodeStructure):
         ('ExtFileAttributes','<H=0'),
     )
     AsciiStructure = (
-        ('FileNameLength','<B-FileName','len(FileName)'),
+        ('FileNameLength','<B-FileName'),
         ('FileName','z'),
     )
     UnicodeStructure = (
-        ('FileNameLength','<B-FileName','len(FileName)*2'),
+        ('FileNameLength','<B-FileName'),
         ('FileName',':'),
     )
 
@@ -1300,7 +1302,7 @@ class SMBQueryFileAllInfo(Structure):
         ('Directory','<B'),
         ('Reserved','<H=0'),
         ('EaSize','<L=0'),
-        ('FileNameLength','<L-FileName','len(FileName)'),
+        ('FileNameLength','<L-FileName'),
         ('FileName',':'),
     )
 
@@ -1501,7 +1503,7 @@ class SMBSessionSetupAndX_Extended_Response_Data(AsciiOrUnicodeStructure):
     )
     def getData(self):
         if self.structure == self.UnicodeStructure:
-            if len(str(self['SecurityBlob'])) % 2 == 0:
+            if len(self['SecurityBlob']) % 2 == 0:
                 self['Pad'] = '\x00'
         return AsciiOrUnicodeStructure.getData(self)
 
@@ -2881,7 +2883,7 @@ class SMB(object):
         timestamp |= self._dialects_parameters['LowDateTime']
         timestamp -= 116444736000000000
         timestamp //= 10000000
-        d = datetime.datetime.utcfromtimestamp(timestamp)
+        d = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
         return d.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     def disconnect_tree(self, tid):
@@ -3249,7 +3251,7 @@ class SMB(object):
         authenticator['authenticator-vno'] = 5
         authenticator['crealm'] = domain
         seq_set(authenticator, 'cname', userName.components_to_asn1)
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
 
         authenticator['cusec'] = now.microsecond
         authenticator['ctime'] = KerberosTime.to_asn1(now)
@@ -3982,7 +3984,7 @@ class SMB(object):
                         findNextParameter['SID'] = sid
                         findNextParameter['SearchCount'] = 1024
                         findNextParameter['InformationLevel'] = SMB_FIND_FILE_BOTH_DIRECTORY_INFO
-                        findNextParameter['ResumeKey'] = 0
+                        findNextParameter['ResumeKey'] = record["FileIndex"]
                         findNextParameter['Flags'] = SMB_FIND_RETURN_RESUME_KEYS | SMB_FIND_CLOSE_AT_EOS
                         if self.__flags2 & SMB.FLAGS2_UNICODE:
                             findNextParameter['FileName'] = resume_filename + b'\x00\x00'
